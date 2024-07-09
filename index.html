@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <title>FiddlyWiki</title>
+    <style>
+      .error {
+        color: #f16363;
+        font-style: italic;
+      }
+
+      .italic { font-style: italic; }
+      .hidden { display: none; }
+
+      .split-20-80 {
+        display: grid;
+        grid-template-columns: 20% 1fr;
+        gap: 1rem;
+      }
+
+      #notifications-container {
+        position: absolute;
+        top: 2em;
+        right: 2em;
+      }
+
+      .notification {
+        z-index: 2;
+        padding: 1em;
+        background: #90EE90;
+        border: 1px solid black;
+        margin-bottom: 0.5em;
+        min-width: 10em;
+      }
+
+      div.error {
+        color: black;
+        background-color: #f16363;
+      }
+
+      *[contenteditable] {
+        border: 1px dotted grey;
+      }
+
+      input[type=button] {
+        background: none;
+        border: none;
+        color: blue;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+
+  <body>
+    <script>
+      function getPages() {
+        return JSON.parse(document.querySelector('#pages').innerHTML)
+      }
+
+      function getPage(slug) {
+        return getPages().find(page => page.slug === slug)
+      }
+
+      function setPage(page) {
+        const pages = getPages()
+        let index = pages.findIndex(existingPage => existingPage.slug === page.slug)
+        if (page.originalSlug && page.originalSlug != page.slug)
+          index = pages.findIndex(existingPage => existingPage.slug === page.originalSlug)
+
+        if (index == -1)
+          index = pages.length
+
+        pages[index] = { ...page, content: { ...page.content } }
+        const json = JSON.stringify(pages, undefined, 2)
+        document.querySelector('#pages').innerHTML = json
+      }
+
+      function getActivePage() {
+        // TODO: Antirenderers? SEE: get data()
+        const contentRenderers = {
+          'text/html': (target, data) => target.innerHTML = data,
+          'text/markdown': (target, data) => target.innerText = data,
+          'text/plain': (target, data) => target.innerText = data,
+        }
+
+        const title = document.querySelector('#active-page-title')
+        const slug = document.querySelector('#active-page-slug')
+        const type = document.querySelector('#active-page-content-type')
+        const data = document.querySelector('#active-page-content-data')
+
+        return {
+          get title() { return title.textContent },
+          set title(s) { title.textContent = s },
+          get slug() { return slug.textContent },
+          set slug(s) { slug.textContent = s; slug.setAttribute('data-original-slug', s) },
+          get originalSlug() { return slug.getAttribute('data-original-slug') },
+          content: {
+            get type() { return type.textContent },
+            set type(s) { type.textContent = s },
+            get data() {
+              return type.textContent === 'text/html'
+                ? data.innerHTML
+                : data.innerText
+            },
+            set data(s) {
+              const renderer = contentRenderers[type.textContent]
+              if (!renderer) {
+                console.assert(renderer, `Unsupported content type: ${type.textContent}`)
+                renderer = contentRenderers['text/plain']
+              }
+
+              renderer(data, s)
+            },
+          }
+        }
+      }
+
+      function setActivePage(slug) {
+          const activePage = getActivePage()
+          const page = getPage(slug) ?? {
+            title: 'lazy_title',
+            slug: slug,
+            content: {
+              type: 'text/plain',
+              data: `Page not found: ${slug}.`
+            }
+          }
+
+          activePage.title = page.title
+          activePage.slug = page.slug
+          activePage.content.type = page.content.type
+          activePage.content.data = page.content.data
+
+          window.location.hash = `#?p=${activePage.slug}`
+        }
+
+        function populateAllPages() {
+          const pages = getPages()
+          const allPages = document.querySelector('#all-pages')
+          allPages.innerHTML = pages
+            .map(page => `<li><a href="#?p=${page.slug}">${page.title}</a></li>`)
+            .join('\n')
+        }
+
+        /* All of the SPA options suck, but since I am not beholden to any kind
+         * of quality control, I have decided to go with my own, sucky
+         * alternative instead; reroute our ? parameters behind our #.
+         * => https://stackoverflow.com/a/52809105  How to detect if URL has changed */
+        function setActivePageFromHash() {
+          console.assert(window.location.hash.length, 'There should always be a hash!')
+          const queryParams = new URLSearchParams(window.location.hash.substr(1))
+          const slug = queryParams.get('p')
+            ?? getPages()?.[0]?.slug
+            ?? ""
+          setActivePage(slug)
+        }
+
+        function addNotification({ content, kind }, timeout = 4000) {
+          const notificationsContainer = document.querySelector('#notifications-container')
+          const notification = document.createElement('div')
+          notification.classList.add('notification')
+          if (kind) notification.classList.add(kind)
+
+          notification.innerHTML = content
+          notificationsContainer.append(notification)
+
+          if (timeout >= 0) {
+            setTimeout(
+              () => notificationsContainer.removeChild(notification),
+              timeout
+            )
+          }
+        }
+
+        function getDocumentAsFile() {
+          const content = `<!DOCTYPE html>\n${document.firstElementChild.outerHTML}`
+          let name = window.location.pathname.split('/').pop() || 'index'
+          const extension = '.html'
+          if (!name.endsWith(extension)) name = name + extension
+
+          const file = new File([ content ], name, { type: 'application/octet-stream' })
+          return file
+        }
+
+        function onSaveButtonClick() {
+          window.open(URL.createObjectURL(getDocumentAsFile()))
+          addNotification({ content: 'Saved' })
+        }
+
+        function onUploadButtonClick() {
+          const file = getDocumentAsFile()
+          const requestLocation = window.location
+          const requestOptions = {
+            body: file,
+            credentials: 'same-origin',
+            method: 'POST'
+          }
+
+          fetch(requestLocation, requestOptions)
+            .then(resp => resp.text())
+            .then(text => addNotification({
+              content: 'Uploaded successfully' + (text.length ? `: ${text}` : '')
+            }))
+            .catch(error => addNotification({
+              content: `Upload failed: ${error}`,
+              kind: 'error'
+            }))
+        }
+
+        function onNewButtonClick() {
+          window.location.hash = '#?p=new-page'
+        }
+
+        function onExportButtonClick() {
+          const json = document.querySelector('#pages').innerHTML
+          const file = new File([ json ], 'wiki.json', { type: 'application/octet-stream' })
+          window.open(URL.createObjectURL(file))
+          addNotification({ content: 'Exported' })
+        }
+
+        FileReader.prototype.readAsTextAsync = function(blob) {
+          return new Promise((resolve, reject) => {
+            this.addEventListener('load', () => {
+              resolve(this.result)
+            })
+
+            this.addEventListener('abort', () => {
+              reject(new Error('The load was aborted'))
+            })
+
+            this.addEventListener('error', () => {
+              reject(new Error('The load errored'))
+            })
+
+            this.readAsText(blob)
+          })
+        }
+
+        async function onImportFileChange() {
+          const importFile = document.querySelector('#import-file')
+          if (importFile.files.length < 1) return
+          if (importFile.files.length > 1) return addNotification({
+            content: 'Import only supports singular files',
+            type: 'error'
+          })
+
+          console.assert(importFile.files.length === 1)
+          const [ file ] = importFile.files
+          // TODO: Merge?
+          if (!window.confirm(`Import from ${file.name}? The imported pages will completely replace the current pages.`))
+            return
+
+          const reader = new FileReader()
+          const json = await reader.readAsTextAsync(file)
+          // TODO: Validate JSON...
+          const pages = document.querySelector('#pages')
+          pages.innerHTML = json
+
+          // TODO: Consolidate/simplify full re-render process!
+          // Re-render everything
+          populateAllPages()
+          setActivePageFromHash()
+
+
+          addNotification({
+            content: `Import of ${getPages().length} pages complete`
+          })
+        }
+
+        function onImportButtonClick() {
+          const importFile = document.querySelector('#import-file')
+          importFile.click()
+          // onImportFileChange will handle us from here.
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+          populateAllPages()
+
+          document.querySelector('#active-page').addEventListener('focusout', event => {
+            const activePage = getActivePage()
+            setPage(activePage)
+            // TODO: Consolidate/simplify full re-render process!
+            populateAllPages()
+            setActivePage(activePage.slug)
+          })
+
+          document.querySelector('#save-button').addEventListener('click', onSaveButtonClick)
+          document.querySelector('#upload-button').addEventListener('click', onUploadButtonClick)
+          document.querySelector('#new-button').addEventListener('click', onNewButtonClick)
+          document.querySelector('#export-button').addEventListener('click', onExportButtonClick)
+          document.querySelector('#import-button').addEventListener('click', onImportButtonClick)
+          document.querySelector('#import-file').addEventListener('change', onImportFileChange)
+
+          if (!window.location.hash)
+            window.location.hash = '#' + window.location.search
+
+          setActivePageFromHash()
+          window.addEventListener('hashchange', setActivePageFromHash)
+
+          document.querySelector('#wiki-title').addEventListener('input', () => {
+            document.title = document.querySelector('#wiki-title').textContent
+          })
+        })
+    </script>
+
+    <h1 id="wiki-title" contenteditable="">FiddlyWiki</h1>
+
+    <div class="split-20-80">
+      <div>
+        <div>
+          <div>
+            <input type="button" id="save-button" value="[save]">
+            <input type="button" id="upload-button" value="[upload]">
+          </div>
+          <div>
+            <input type="button" id="new-button" value="[new]">
+            <input type="button" id="export-button" value="[export]">
+            <input type="button" id="import-button" value="[import]">
+            <input type="file" id="import-file" class="hidden">
+          </div>
+        </div>
+        <nav id="all-pages-container">
+          <ul id="all-pages"><li><a href="#?p=">FiddlyWiki home</a></li></ul>
+        </nav>
+      </div>
+
+      <div id="active-page">
+        <div>
+          <h1 id="active-page-title" contenteditable="">FiddlyWiki home</h1>
+          <span>
+            <span>slug:</span><span id="active-page-slug" data-original-slug="" contenteditable=""></span>,
+            <span>type:</span><span id="active-page-content-type" contenteditable="">text/plain</span>
+          </span>
+        </div>
+        <hr>
+        <div id="active-page-content-data" contenteditable="">Welcome to FiddlyWiki!<br><br>## Quick-Start Guide<br><br>All fields with a dotted-grey border may be edited by clicking inside of them. Any changes made within such a field will be automatically reflected on your local/client-side copy of the application.<br><br>To commit a change you can use the [save] and [upload] buttons, which download the current page as HTML, or POST the current page as HTML respectively.<br><br>The [new] button may be used to create a new wiki page.<br><br>The [export] and [import] buttons may be used to interact with the underlying JSON representation of the wiki's pages. These buttons may be useful during migrations and/or updates to the software.<br><br>Below the buttons are a list of the wiki's current pages, clicking on one will open it (hiding this page!). Pages can be permalinked by copying the URL displayed when navigating to that page.<br></div>
+      </div>
+    </div>
+
+    <div id="notifications-container">
+    <div class="notification">Saved</div></div>
+
+    <script id="pages" type="application/json">[
+  {
+    "title": "FiddlyWiki home",
+    "slug": "",
+    "originalSlug": "",
+    "content": {
+      "type": "text/plain",
+      "data": "Welcome to FiddlyWiki!\n\n## Quick-Start Guide\n\nAll fields with a dotted-grey border may be edited by clicking inside of them. Any changes made within such a field will be automatically reflected on your local/client-side copy of the application.\n\nTo commit a change you can use the [save] and [upload] buttons, which download the current page as HTML, or POST the current page as HTML respectively.\n\nThe [new] button may be used to create a new wiki page.\n\nThe [export] and [import] buttons may be used to interact with the underlying JSON representation of the wiki's pages. These buttons may be useful during migrations and/or updates to the software.\n\nBelow the buttons are a list of the wiki's current pages, clicking on one will open it (hiding this page!). Pages can be permalinked by copying the URL displayed when navigating to that page.\n"
+    }
+  }
+]</script>
+  
+</body></html>
