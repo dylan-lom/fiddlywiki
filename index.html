@@ -10,6 +10,7 @@
 
       .italic { font-style: italic; }
       .hidden { display: none; }
+      .float-right { float: right; }
 
       .split-20-80 {
         display: grid;
@@ -70,7 +71,12 @@
         if (index == -1)
           index = pages.length
 
-        pages[index] = { ...page, content: { ...page.content } }
+        if (page.content === null) { /* Delete the current page */
+          console.log(pages, index)
+          pages.splice(index, 1)
+        } else {
+          pages[index] = { ...page, content: { ...page.content } }
+        }
         const json = JSON.stringify(pages, undefined, 2)
         document.querySelector('#pages').innerHTML = json
       }
@@ -273,6 +279,24 @@
           // onImportFileChange will handle us from here.
         }
 
+        function onActivePageDeleteButtonClick() {
+          const activePage = getActivePage()
+
+          if (activePage.slug == "")
+            return window.alert('Cannot delete the empty-slug')
+
+          if (!window.confirm(`Delete ${activePage.title} (${activePage.slug})?`))
+            return
+
+          setPage({
+            slug: activePage.slug,
+            content: null
+          })
+
+          setActivePage('')
+
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
           populateAllPages()
 
@@ -290,6 +314,7 @@
           document.querySelector('#export-button').addEventListener('click', onExportButtonClick)
           document.querySelector('#import-button').addEventListener('click', onImportButtonClick)
           document.querySelector('#import-file').addEventListener('change', onImportFileChange)
+          document.querySelector('#active-page-delete-button').addEventListener('click', onActivePageDeleteButtonClick)
 
           if (!window.location.hash)
             window.location.hash = '#' + window.location.search
@@ -329,7 +354,8 @@
           <h1 id="active-page-title" contenteditable="">FiddlyWiki home</h1>
           <span>
             <span>slug:</span><span id="active-page-slug" data-original-slug="" contenteditable=""></span>,
-            <span>type:</span><span id="active-page-content-type" contenteditable="">text/plain</span>
+            <span>type:</span><span id="active-page-content-type" contenteditable="">text/plain</span>,
+            <input type="button" id="active-page-delete-button" class="float-right" value="[delete]">
           </span>
         </div>
         <hr>
@@ -338,7 +364,7 @@
     </div>
 
     <div id="notifications-container">
-    <div class="notification">Saved</div></div>
+    </div>
 
     <script id="pages" type="application/json">[
   {
