@@ -144,7 +144,7 @@
           const pages = getPages()
           const allPages = document.querySelector('#all-pages')
           allPages.innerHTML = pages
-            .map(page => `<li><a href="#?p=${page.slug}">${page.title}</a></li>`)
+            .map(page => `<li data-slug=${page.slug}><a href="#?p=${page.slug}">${page.title}</a></li>`)
             .join('\n')
         }
 
@@ -214,7 +214,12 @@
         }
 
         function onNewButtonClick() {
-          window.location.hash = '#?p=new-page'
+          const pagesSearch = document.querySelector('#pages-search')
+          const slug = pagesSearch.value.trim().length
+            ? pagesSearch.value.trim()
+            : 'new-page'
+
+          window.location.hash = `#?p=${slug}`
         }
 
         function onExportButtonClick() {
@@ -279,6 +284,19 @@
           // onImportFileChange will handle us from here.
         }
 
+        function onPagesSearchInput() {
+          const pagesSearch = document.querySelector('#pages-search')
+          const pages = [...document.querySelectorAll('#all-pages > li')]
+          const q = pagesSearch.value.trim()
+
+          pages.forEach(page => page.classList.remove('hidden')) // reset
+          if (q.length === 0) return
+
+          pages.filter(page =>
+            !page.textContent.includes(q) && !page.getAttribute('data-slug').includes(q)
+          ).forEach(page => page.classList.add('hidden'))
+        }
+
         function onActivePageDeleteButtonClick() {
           const activePage = getActivePage()
 
@@ -314,6 +332,7 @@
           document.querySelector('#export-button').addEventListener('click', onExportButtonClick)
           document.querySelector('#import-button').addEventListener('click', onImportButtonClick)
           document.querySelector('#import-file').addEventListener('change', onImportFileChange)
+          document.querySelector('#pages-search').addEventListener('input', onPagesSearchInput)
           document.querySelector('#active-page-delete-button').addEventListener('click', onActivePageDeleteButtonClick)
 
           if (!window.location.hash)
@@ -343,6 +362,10 @@
             <input type="button" id="import-button" value="[import]">
             <input type="file" id="import-file" class="hidden">
           </div>
+          <div>
+            <input type="search" id="pages-search" placeholder="[filter]">
+          </div>
+
         </div>
         <nav id="all-pages-container">
           <ul id="all-pages"><li><a href="#?p=">FiddlyWiki home</a></li></ul>
