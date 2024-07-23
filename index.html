@@ -18,6 +18,12 @@
         gap: 1rem;
       }
 
+      pre.text {
+        font-family: inherit;
+        white-space: normal;
+        margin: 0;
+      }
+
       #notifications-container {
         position: absolute;
         top: 2em;
@@ -111,9 +117,14 @@
         // TODO: Antirenderers? SEE: get data()
         const contentRenderers = {
           'text/html': (target, data) => target.innerHTML = data,
-          'text/markdown': (target, data) => target.innerText = data,
-          'text/plain': (target, data) => target.innerText = data,
-          'application/json': (target, data) => target.innerHTML = `<pre><code>${data}</code></pre>`
+          'application/json': (target, data) => target.innerHTML = `<pre><code>${data}</code></pre>`,
+          'text/plain': (target, data) => {
+          /* For some reason, firefox likes to insert extra <div>s, which turn into extra <br>s
+           * on re-renders, the pre prevents this from happening, and the .text makes it appear
+           * like a regular old div */
+            target.innerHTML = '<pre class="text"></pre>'
+            target.querySelector('pre').innerText = data
+          },
         }
 
         const title = document.querySelector('#active-page-title')
@@ -121,12 +132,13 @@
         const type = document.querySelector('#active-page-content-type')
         const data = document.querySelector('#active-page-content-data')
 
+        let originalSlug = slug.textContent
         return {
           get title() { return title.textContent },
           set title(s) { title.textContent = s },
           get slug() { return slug.textContent },
-          set slug(s) { slug.textContent = s; slug.setAttribute('data-original-slug', s) },
-          get originalSlug() { return slug.getAttribute('data-original-slug') },
+          set slug(s) { slug.textContent = s; originalSlug = s },
+          get originalSlug() { return originalSlug; },
           content: {
             get type() { return type.textContent },
             set type(s) { type.textContent = s },
@@ -136,9 +148,12 @@
                 : data.innerText
             },
             set data(s) {
-              const renderer = contentRenderers[type.textContent]
+              let renderer = contentRenderers[type.textContent]
               if (!renderer) {
-                console.assert(renderer, `Unsupported content type: ${type.textContent}`)
+                addNotification({
+                  content: `Unsupported content type: ${type.textContent}. Falling back to text/plain.`,
+                  kind: 'error'
+                })
                 renderer = contentRenderers['text/plain']
               }
 
@@ -437,7 +452,7 @@
         <div>
           <h1 id="active-page-title" contenteditable="">FiddlyWiki home</h1>
           <span>
-            <span>slug:</span><span id="active-page-slug" data-original-slug="" contenteditable=""></span>,
+            <span>slug:</span><span id="active-page-slug" contenteditable=""></span>,
             <span>type:</span><span id="active-page-content-type" contenteditable="">text/plain</span>,
             <input type="button" id="active-page-delete-button" class="float-right" value="[delete]">
           </span>
