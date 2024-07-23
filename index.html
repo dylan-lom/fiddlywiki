@@ -66,11 +66,32 @@
         return getPages().find(page => page.slug === slug)
       }
 
+      function throws(f) {
+        try {
+          f()
+          return false
+        } catch {
+          return true
+        }
+      }
+
       function setPage(page) {
         const pages = getPages()
         let index = pages.findIndex(existingPage => existingPage.slug === page.slug)
-        if (page.originalSlug && page.originalSlug != page.slug && page.originalSlug != 'Special:New')
+
+        if (page.originalSlug && page.originalSlug != page.slug && page.originalSlug != 'Special:New') {
           index = pages.findIndex(existingPage => existingPage.slug === page.originalSlug)
+        }
+
+        if (page.slug == 'Special:Settings' && (
+          page.content.type !== 'application/json'
+          || throws(JSON.parse.bind(null, page.content.data))
+        )) {
+          if (window.confirm('Special:Settings is invalid, reset to defaults?')) {
+            page.content.type = 'application/json'
+            page.content.data = JSON.stringify(getSettings(true), undefined, 2)
+          }
+        }
 
         if (index == -1)
           index = pages.length
@@ -81,6 +102,7 @@
         } else {
           pages[index] = { ...page, content: { ...page.content } }
         }
+
         const json = JSON.stringify(pages, undefined, 2)
         document.querySelector('#pages').innerHTML = json
       }
@@ -91,6 +113,7 @@
           'text/html': (target, data) => target.innerHTML = data,
           'text/markdown': (target, data) => target.innerText = data,
           'text/plain': (target, data) => target.innerText = data,
+          'application/json': (target, data) => target.innerHTML = `<pre><code>${data}</code></pre>`
         }
 
         const title = document.querySelector('#active-page-title')
@@ -197,12 +220,37 @@
           addNotification({ content: 'Saved' })
         }
 
+        function getSettings(getDefault = false) {
+          const defaultSettings = {
+            uploadTarget: window.location.origin + window.location.pathname,
+            uploadCredentials: 'same-origin',
+          }
+
+          if (getDefault) return defaultSettings
+
+          const page = getPage('Special:Settings')
+          if (!page) return defaultSettings
+
+          const parseSettings = JSON.parse.bind(null, page.content.data)
+          if (page.content.type !== 'application/json' || throws(parseSettings)) {
+            addNotification({
+              content: 'Special:Settings is invalid, ignoring',
+              kind: 'error',
+            })
+            return defaultSettings
+          }
+
+          return parseSettings()
+        }
+
         function onUploadButtonClick() {
           const file = getDocumentAsFile()
-          const requestLocation = window.location
+          const settings = getSettings()
+          const requestLocation = settings.uploadTarget
+          console.log(requestLocation)
           const requestOptions = {
             body: file,
-            credentials: 'same-origin',
+            credentials: settings.uploadCredentials,
             method: 'POST'
           }
 
