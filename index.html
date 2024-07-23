@@ -24,6 +24,10 @@
         right: 2em;
       }
 
+      #pages-search {
+        max-width: 100%;
+      }
+
       .notification {
         z-index: 2;
         padding: 1em;
@@ -311,8 +315,11 @@
             content: null
           })
 
-          setActivePage('')
+          setActivePage('Special:Home')
+        }
 
+        function onWindowHashChange() {
+          setActivePageFromHash()
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -326,24 +333,28 @@
             setActivePage(activePage.slug)
           })
 
-          document.querySelector('#save-button').addEventListener('click', onSaveButtonClick)
-          document.querySelector('#upload-button').addEventListener('click', onUploadButtonClick)
-          document.querySelector('#new-button').addEventListener('click', onNewButtonClick)
-          document.querySelector('#export-button').addEventListener('click', onExportButtonClick)
-          document.querySelector('#import-button').addEventListener('click', onImportButtonClick)
-          document.querySelector('#import-file').addEventListener('change', onImportFileChange)
-          document.querySelector('#pages-search').addEventListener('input', onPagesSearchInput)
-          document.querySelector('#active-page-delete-button').addEventListener('click', onActivePageDeleteButtonClick)
+          const addEventListener = function(target, type, listener) {
+            (typeof target === 'string'
+              ? document.querySelector(target)
+              : target
+            ).addEventListener(type, listener)
+          }
 
-          if (!window.location.hash)
-            window.location.hash = '#' + window.location.search
+          addEventListener('#save-button', 'click', onSaveButtonClick)
+          addEventListener('#upload-button', 'click', onUploadButtonClick)
+          addEventListener('#new-button', 'click', onNewButtonClick)
+          addEventListener('#export-button', 'click', onExportButtonClick)
+          addEventListener('#import-button', 'click', onImportButtonClick)
+          addEventListener('#import-file', 'change', onImportFileChange)
+          addEventListener('#pages-search', 'input', onPagesSearchInput)
+          addEventListener('#active-page-delete-button', 'click', onActivePageDeleteButtonClick)
+          addEventListener('#wiki-title', 'input', () => document.title = document.querySelector('#wiki-title').textContent)
+          addEventListener(window, 'hashchange', onWindowHashChange)
 
-          setActivePageFromHash()
-          window.addEventListener('hashchange', setActivePageFromHash)
-
-          document.querySelector('#wiki-title').addEventListener('input', () => {
-            document.title = document.querySelector('#wiki-title').textContent
-          })
+          if (window.location.hash)
+            setActivePageFromHash()
+          else
+            setActivePage('Special:Home')
         })
     </script>
 
@@ -392,7 +403,7 @@
     <script id="pages" type="application/json">[
   {
     "title": "FiddlyWiki home",
-    "slug": "",
+    "slug": "Special:Home",
     "originalSlug": "",
     "content": {
       "type": "text/plain",
