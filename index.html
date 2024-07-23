@@ -309,15 +309,20 @@
 
           console.assert(importFile.files.length === 1)
           const [ file ] = importFile.files
-          // TODO: Merge?
-          if (!window.confirm(`Import from ${file.name}? The imported pages will completely replace the current pages.`))
+          if (!window.confirm(`Import from ${file.name}? Any slug-collisions will be replaced with the incoming.`))
             return
 
-          const reader = new FileReader()
-          const json = await reader.readAsTextAsync(file)
-          // TODO: Validate JSON...
-          const pages = document.querySelector('#pages')
-          pages.innerHTML = json
+          try {
+            const reader = new FileReader()
+            const text = await reader.readAsTextAsync(file)
+            const newPages = JSON.parse(text)
+            newPages.map(newPage => setPage(newPage))
+          } catch (error) {
+            addNotification({
+              content: `Failed to import ${file.name}: ${error}`,
+              kind: 'error'
+            })
+          }
 
           // TODO: Consolidate/simplify full re-render process!
           // Re-render everything
@@ -351,9 +356,6 @@
 
         function onActivePageDeleteButtonClick() {
           const activePage = getActivePage()
-
-          if (activePage.slug == "")
-            return window.alert('Cannot delete the empty-slug')
 
           if (!window.confirm(`Delete ${activePage.title} (${activePage.slug})?`))
             return
