@@ -69,7 +69,7 @@
       function setPage(page) {
         const pages = getPages()
         let index = pages.findIndex(existingPage => existingPage.slug === page.slug)
-        if (page.originalSlug && page.originalSlug != page.slug)
+        if (page.originalSlug && page.originalSlug != page.slug && page.originalSlug != 'Special:New')
           index = pages.findIndex(existingPage => existingPage.slug === page.originalSlug)
 
         if (index == -1)
@@ -221,7 +221,7 @@
           const pagesSearch = document.querySelector('#pages-search')
           const slug = pagesSearch.value.trim().length
             ? pagesSearch.value.trim()
-            : 'new-page'
+            : 'Special:New'
 
           window.location.hash = `#?p=${slug}`
         }
