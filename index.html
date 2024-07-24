@@ -182,11 +182,21 @@
           window.location.hash = `#?p=${activePage.slug}`
         }
 
-        function populateAllPages() {
+        function populateAllPages(filter = '') {
           const pages = getPages()
           const allPages = document.querySelector('#all-pages')
+
           allPages.innerHTML = pages
-            .map(page => `<li data-slug=${page.slug}><a href="#?p=${page.slug}">${page.title}</a></li>`)
+            .map(page => {
+              visible = (
+                page.slug.startsWith(filter)
+                && (!page.slug.startsWith('Special:') || filter.startsWith('Special:'))
+              )
+              return `<li
+                data-slug=${page.slug}
+                class="${visible ? '' : 'hidden'}"
+              ><a href="#?p=${page.slug}">${page.title}</a></li>`
+            })
             .join('\n')
         }
 
@@ -358,15 +368,8 @@
 
         function onPagesSearchInput() {
           const pagesSearch = document.querySelector('#pages-search')
-          const pages = [...document.querySelectorAll('#all-pages > li')]
           const q = pagesSearch.value.trim()
-
-          pages.forEach(page => page.classList.remove('hidden')) // reset
-          if (q.length === 0) return
-
-          pages.filter(page =>
-            !page.textContent.includes(q) && !page.getAttribute('data-slug').includes(q)
-          ).forEach(page => page.classList.add('hidden'))
+          populateAllPages(q)
         }
 
         function onActivePageDeleteButtonClick() {
