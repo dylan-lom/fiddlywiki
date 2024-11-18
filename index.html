@@ -490,13 +490,15 @@
         <div>
           <h1 id="active-page-title" contenteditable="">FiddlyWiki home</h1>
           <span>
-            <span>slug:</span><span id="active-page-slug" contenteditable=""></span>,
-            <span>type:</span><span id="active-page-content-type" contenteditable="">text/plain</span>,
+            <span>slug:</span><span id="active-page-slug" contenteditable=""></span>
             <input type="button" id="active-page-delete-button" class="float-right" value="[delete]">
           </span>
         </div>
         <hr>
-        <div id="active-page-content-data" contenteditable=""></div>
+        <div id="active-page-content-container">
+          <div class="float-right"><span>type:</span><span id="active-page-content-type" contenteditable="">text/plain</span></div>
+          <div id="active-page-content-data" contenteditable=""></div>
+        </div>
       </div>
     </div>
 
