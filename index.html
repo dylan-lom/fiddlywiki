@@ -59,6 +59,8 @@
         text-decoration: underline;
         cursor: pointer;
       }
+
+      .small { font-size: 0.6rem; }
     </style>
   </head>
 
@@ -177,8 +179,9 @@
           .forEach(content => content.remove())
 
         // Create new content
-        const contents = page.content.map(({ type, data }) => {
+        const contents = page.content.map(({ type, data }, i) => {
           const content = contentTemplate.content.cloneNode(true).firstElementChild
+          content.id = `${page}-content-${i}`
           content.querySelector('.active-page-content-type').innerText = type
 
           let renderer = contentRenderers[type]
@@ -522,12 +525,27 @@
         </div>
         <hr>
         <div id="active-page-content-container">
+          <script>
+          function onActivePageContentDeleteButtonClick(event) {
+            const { target } = event
+            const content = target.parentElement.parentElement
+            const i = content.id.split('-').pop()
+            const page = getActivePageFromHash()
+            page.content = page.content.filter((_, j) => i != j)
+            setPage(page)
+          }
+          </script>
           <template id="active-page-content-template">
             <div class="active-page-content">
               <div class="float-right">
-                <h2 class="hidden active-page-content-header"></h2>
                 <span>type:</span>
                 <span class="active-page-content-type" contenteditable=""></span>
+                <input
+                  type="button"
+                  class="active-page-content-delete-button"
+                  value="[delete]"
+                  onclick="onActivePageContentDeleteButtonClick(event)"
+                >
               </div>
               <div class="active-page-content-data" contenteditable=""></div>
           </template>
@@ -547,7 +565,7 @@
       </script>
       <template id="notification-template">
         <div class="notification">
-          <input class="float-right" type="button" value="[x]" onclick="onNotificationClearClick(event)">
+          <input class="float-right small" type="button" value="[x]" onclick="onNotificationClearClick(event)">
           <span class="notification-content"></span>
         </div>
       </template>
