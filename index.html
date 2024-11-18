@@ -145,10 +145,12 @@
 
         const json = JSON.stringify(pages, undefined, 2)
         document.querySelector('#pages').innerHTML = json
+        // Rerender
+        if (page.slug == getActivePageSlugFromHash())
+          setActiveDOMPage(page)
       }
 
       function setActiveDOMPage(page) {
-        console.assert(page.content.length == 1, "TODO: Support multipart pages")
         const contentRenderers = {
           'text/html': (target, data) => target.innerHTML = data,
           'application/json': (target, data) => target.innerHTML = `<pre><code>${data}</code></pre>`,
@@ -163,24 +165,37 @@
 
         const title = document.querySelector('#active-page-title')
         const slug = document.querySelector('#active-page-slug')
-        const type = document.querySelector('#active-page-content-type')
-        const data = document.querySelector('#active-page-content-data')
+        const container = document.querySelector('#active-page-content-container')
+        const contentTemplate = document.querySelector('#active-page-content-template')
+        const addButton = document.querySelector('#active-page-content-add-button')
 
         title.innerText = page.title
         slug.innerText = page.slug
-        const [content] = page.content
-        type.innerText = content.type
 
-        let renderer = contentRenderers[type.textContent]
-        if (!renderer) {
-          addNotification({
-            content: `Unsupported content type: ${type.textContent}. Falling back to text/plain.`,
-            kind: 'error'
-          })
-          renderer = contentRenderers['text/plain']
-        }
+        // Clear previous content
+        Array.from(container.querySelectorAll('.active-page-content'))
+          .forEach(content => content.remove())
 
-        renderer(data, content.data)
+        // Create new content
+        const contents = page.content.map(({ type, data }) => {
+          const content = contentTemplate.content.cloneNode(true).firstElementChild
+          content.querySelector('.active-page-content-type').innerText = type
+
+          let renderer = contentRenderers[type]
+          if (!renderer) {
+            addNotification({
+              content: `Unsupported content type: ${type.textContent}. Falling back to text/plain.`,
+              kind: 'error'
+            })
+            renderer = contentRenderers['text/plain']
+          }
+
+          renderer(content.querySelector('.active-page-content-data'), data)
+          return content
+        })
+
+        // Insert new content
+        contents.forEach(content => container.insertBefore(content, addButton))
       }
 
       function setActivePageFromSlug(slug) {
@@ -222,14 +237,17 @@
         function getActivePageFromDOM() {
           const title = document.querySelector('#active-page-title').innerText
           const slug = document.querySelector('#active-page-slug').innerText
-          const type = document.querySelector('#active-page-content-type').innerText
-          // FIXME: HTML?
-          const data = document.querySelector('#active-page-content-data')
-          const pageContent = new PageContent(type, type == 'text/html'
-            ? data.innerHTML
-            : data.innerText)
-          console.log(pageContent)
-          return new Page(title, slug, pageContent)
+
+          const contents = [...document.querySelectorAll('.active-page-content')]
+            .map(content => {
+              const type = content.querySelector('.active-page-content-type').innerText
+              const data = content.querySelector('.active-page-content-data')
+              const pageContent = new PageContent(type, type == 'text/html'
+                          ? data.innerHTML
+                          : data.innerText)
+              return pageContent
+            })
+          return new Page(title, slug, contents)
         }
 
         function getActivePageFromHash() {
@@ -426,6 +444,13 @@
           setActivePageFromHash()
         }
 
+        function onActivePageContentAddButtonClick() {
+          const activePage = getActivePageFromHash()
+          const newContent = new PageContent('text/plain', '')
+          activePage.content.push(newContent)
+          setPage(activePage)
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
           populateAllPages()
 
@@ -433,9 +458,7 @@
             const activePage = getActivePageFromDOM()
             console.log(activePage)
             setPage(activePage)
-            // TODO: Consolidate/simplify full re-render process!
             populateAllPages()
-            setActivePageFromSlug(activePage.slug)
           })
 
           const addEventListener = function(target, type, listener) {
@@ -453,6 +476,7 @@
           addEventListener('#import-file', 'change', onImportFileChange)
           addEventListener('#pages-search', 'input', onPagesSearchInput)
           addEventListener('#active-page-delete-button', 'click', onActivePageDeleteButtonClick)
+          addEventListener('#active-page-content-add-button', 'click', onActivePageContentAddButtonClick)
           addEventListener('#wiki-title', 'input', () => document.title = document.querySelector('#wiki-title').textContent)
           addEventListener(window, 'hashchange', onWindowHashChange)
 
@@ -498,8 +522,17 @@
         </div>
         <hr>
         <div id="active-page-content-container">
-          <div class="float-right"><span>type:</span><span id="active-page-content-type" contenteditable="">text/plain</span></div>
-          <div id="active-page-content-data" contenteditable=""></div>
+          <template id="active-page-content-template">
+            <div class="active-page-content">
+              <div class="float-right">
+                <h2 class="hidden active-page-content-header"></h2>
+                <span>type:</span>
+                <span class="active-page-content-type" contenteditable=""></span>
+              </div>
+              <div class="active-page-content-data" contenteditable=""></div>
+          </template>
+
+          <input class="float-right" type="button" id="active-page-content-add-button" value="[add]">
         </div>
       </div>
     </div>
