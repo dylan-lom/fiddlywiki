@@ -64,8 +64,41 @@
 
   <body>
     <script>
+
+      class PageContent {
+        type /* str */
+        data /* str */
+        constructor(type, data) {
+          this.type = type
+          this.data = data
+        }
+      }
+
+      class Page {
+        title /* str */
+        slug /* str */
+        content /* PageContent[] */
+
+        constructor(title, slug, content) {
+          this.title = title
+          this.slug = slug
+          if (!Array.isArray(content))
+            content = [ content ]
+
+          this.content = content.map(c => c instanceof PageContent
+            ? c
+            : new PageContent(c.type, c.data)
+          )
+        }
+
+        static FromJsonArray(json) /* Page[] */ {
+          console.assert(Array.isArray(json))
+          return json.map(page => new Page(page.title, page.slug, page.content))
+        }
+      }
+
       function getPages() {
-        return JSON.parse(document.querySelector('#pages').innerHTML)
+        return Page.FromJsonArray(JSON.parse(document.querySelector('#pages').innerHTML))
       }
 
       function getPage(slug) {
@@ -85,8 +118,9 @@
         const pages = getPages()
         let index = pages.findIndex(existingPage => existingPage.slug === page.slug)
 
-        if (page.originalSlug && page.originalSlug != page.slug && page.originalSlug != 'Special:New') {
-          index = pages.findIndex(existingPage => existingPage.slug === page.originalSlug)
+        const originalSlug = getActivePageSlugFromHash()
+        if (originalSlug && originalSlug != page.slug && originalSlug != 'Special:New') {
+          index = pages.findIndex(existingPage => existingPage.slug === originalSlug)
         }
 
         if (page.slug == 'Special:Settings' && (
@@ -106,15 +140,15 @@
           console.log(pages, index)
           pages.splice(index, 1)
         } else {
-          pages[index] = { ...page, content: { ...page.content } }
+          pages[index] = { ...page, content: [ ...page.content ] }
         }
 
         const json = JSON.stringify(pages, undefined, 2)
         document.querySelector('#pages').innerHTML = json
       }
 
-      function getActivePage() {
-        // TODO: Antirenderers? SEE: get data()
+      function setActiveDOMPage(page) {
+        console.assert(page.content.length == 1, "TODO: Support multipart pages")
         const contentRenderers = {
           'text/html': (target, data) => target.innerHTML = data,
           'application/json': (target, data) => target.innerHTML = `<pre><code>${data}</code></pre>`,
@@ -132,54 +166,30 @@
         const type = document.querySelector('#active-page-content-type')
         const data = document.querySelector('#active-page-content-data')
 
-        let originalSlug = slug.textContent
-        return {
-          get title() { return title.textContent },
-          set title(s) { title.textContent = s },
-          get slug() { return slug.textContent },
-          set slug(s) { slug.textContent = s; originalSlug = s },
-          get originalSlug() { return originalSlug; },
-          content: {
-            get type() { return type.textContent },
-            set type(s) { type.textContent = s },
-            get data() {
-              return type.textContent === 'text/html'
-                ? data.innerHTML
-                : data.innerText
-            },
-            set data(s) {
-              let renderer = contentRenderers[type.textContent]
-              if (!renderer) {
-                addNotification({
-                  content: `Unsupported content type: ${type.textContent}. Falling back to text/plain.`,
-                  kind: 'error'
-                })
-                renderer = contentRenderers['text/plain']
-              }
+        title.innerText = page.title
+        slug.innerText = page.slug
+        const [content] = page.content
+        type.innerText = content.type
 
-              renderer(data, s)
-            },
-          }
+        let renderer = contentRenderers[type.textContent]
+        if (!renderer) {
+          addNotification({
+            content: `Unsupported content type: ${type.textContent}. Falling back to text/plain.`,
+            kind: 'error'
+          })
+          renderer = contentRenderers['text/plain']
         }
+
+        renderer(data, content.data)
       }
 
-      function setActivePage(slug) {
-          const activePage = getActivePage()
-          const page = getPage(slug) ?? {
-            title: 'lazy_title',
-            slug: slug,
-            content: {
-              type: 'text/plain',
-              data: `Page not found: ${slug}.`
-            }
-          }
-
-          activePage.title = page.title
-          activePage.slug = page.slug
-          activePage.content.type = page.content.type
-          activePage.content.data = page.content.data
-
-          window.location.hash = `#?p=${activePage.slug}`
+      function setActivePageFromSlug(slug) {
+          const page = (
+            getPage(slug)
+            ?? new Page('lazy_title', slug, new PageContent('text/plain', `Page not found: ${slug}`))
+          )
+          setActiveDOMPage(page)
+          window.location.hash = `#?p=${slug}`
         }
 
         function populateAllPages(filter = '') {
@@ -188,7 +198,7 @@
 
           allPages.innerHTML = pages
             .map(page => {
-              visible = (
+              const visible = (
                 page.slug.startsWith(filter)
                 && (!page.slug.startsWith('Special:') || filter.startsWith('Special:'))
               )
@@ -200,17 +210,41 @@
             .join('\n')
         }
 
-        /* All of the SPA options suck, but since I am not beholden to any kind
-         * of quality control, I have decided to go with my own, sucky
-         * alternative instead; reroute our ? parameters behind our #.
-         * => https://stackoverflow.com/a/52809105  How to detect if URL has changed */
-        function setActivePageFromHash() {
+        function getActivePageSlugFromHash() {
           console.assert(window.location.hash.length, 'There should always be a hash!')
           const queryParams = new URLSearchParams(window.location.hash.substr(1))
           const slug = queryParams.get('p')
             ?? getPages()?.[0]?.slug
             ?? ""
-          setActivePage(slug)
+          return slug
+        }
+
+        function getActivePageFromDOM() {
+          const title = document.querySelector('#active-page-title').innerText
+          const slug = document.querySelector('#active-page-slug').innerText
+          const type = document.querySelector('#active-page-content-type').innerText
+          // FIXME: HTML?
+          const data = document.querySelector('#active-page-content-data')
+          const pageContent = new PageContent(type, type == 'text/html'
+            ? data.innerHTML
+            : data.innerText)
+          console.log(pageContent)
+          return new Page(title, slug, pageContent)
+        }
+
+        function getActivePageFromHash() {
+          const slug = getActivePageSlugFromHash()
+          const page = getPage(slug)
+          return page
+        }
+
+        /* All of the SPA options suck, but since I am not beholden to any kind
+         * of quality control, I have decided to go with my own, sucky
+         * alternative instead; reroute our ? parameters behind our #.
+         * => https://stackoverflow.com/a/52809105  How to detect if URL has changed */
+        function setActivePageFromHash() {
+          const slug = getActivePageSlugFromHash()
+          setActivePageFromSlug(slug)
         }
 
         function addNotification({ content, kind }, timeout = 4000) {
@@ -373,17 +407,17 @@
         }
 
         function onActivePageDeleteButtonClick() {
-          const activePage = getActivePage()
-
+          const activePage = getActivePageFromHash()
           if (!window.confirm(`Delete ${activePage.title} (${activePage.slug})?`))
             return
 
+          console.assert(false, 'TODO: Fix onActivePageDeleteButtonClick!')
           setPage({
             slug: activePage.slug,
             content: null
           })
 
-          setActivePage('Special:Home')
+          setActivePageFromSlug('Special:Home')
         }
 
         function onWindowHashChange() {
@@ -394,11 +428,12 @@
           populateAllPages()
 
           document.querySelector('#active-page').addEventListener('focusout', event => {
-            const activePage = getActivePage()
+            const activePage = getActivePageFromDOM()
+            console.log(activePage)
             setPage(activePage)
             // TODO: Consolidate/simplify full re-render process!
             populateAllPages()
-            setActivePage(activePage.slug)
+            setActivePageFromSlug(activePage.slug)
           })
 
           const addEventListener = function(target, type, listener) {
@@ -422,7 +457,7 @@
           if (window.location.hash)
             setActivePageFromHash()
           else
-            setActivePage('Special:Home')
+            setActivePageFromSlug('Special:Home')
         })
     </script>
 
