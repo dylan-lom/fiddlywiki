@@ -249,16 +249,18 @@
 
         function addNotification({ content, kind }, timeout = 4000) {
           const notificationsContainer = document.querySelector('#notifications-container')
-          const notification = document.createElement('div')
-          notification.classList.add('notification')
+          const notificationTemplate = document.querySelector('#notification-template')
+          const notification = notificationTemplate.content.cloneNode(true).firstElementChild
           if (kind) notification.classList.add(kind)
 
-          notification.innerHTML = content
+          notification.querySelector('.notification-content').innerText = content
           notificationsContainer.append(notification)
 
           if (timeout >= 0) {
             setTimeout(
-              () => notificationsContainer.removeChild(notification),
+              () => {
+                notification.isConnected && notification.remove()
+              },
               timeout
             )
           }
@@ -503,6 +505,19 @@
     </div>
 
     <div id="notifications-container">
+      <script>
+      function onNotificationClearClick(event) {
+        const { target } = event
+        const notification = target.parentElement
+        notification.remove()
+      }
+      </script>
+      <template id="notification-template">
+        <div class="notification">
+          <input class="float-right" type="button" value="[x]" onclick="onNotificationClearClick(event)">
+          <span class="notification-content"></span>
+        </div>
+      </template>
     </div>
 
     <script id="pages" type="application/json">[
