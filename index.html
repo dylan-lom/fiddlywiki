@@ -78,6 +78,7 @@
           const renderers = {
             'text/html': (data) => target.innerHTML = data,
             'application/json': (data) => target.innerHTML = `<pre><code>${data}</code></pre>`,
+            'image': (data) => target.innerHTML = `<img src="${data}">`,
             'text/plain': (data) => {
             /* For some reason, firefox likes to insert extra <div>s, which turn into extra <br>s
              * on re-renders, the pre prevents this from happening, and the .text makes it appear
@@ -87,7 +88,11 @@
             }
           }
 
-          const nativeRenderer = renderers[this.type]
+          const type = this.type.startsWith('image')
+            ? 'image'
+            : this.type
+
+          const nativeRenderer = renderers[type]
           const renderer = nativeRenderer ?? renderers['text/plain']
           renderer(this.data)
           return !!nativeRenderer
@@ -97,10 +102,15 @@
           const derenderers = {
             'text/html': () => target.innerHTML,
             'application/json': () => targert.innerText,
+            'image': () => (target.querySelector('img')?.src ?? '') + target.innerText,
             'text/plain': () => target.innerText,
           }
 
-          const derenderer = derenderers[type] ?? derenderers['text/plain']
+          const renderType = type.startsWith('image')
+            ? 'image'
+            : type
+
+          const derenderer = derenderers[renderType] ?? derenderers['text/plain']
           const data = derenderer(target)
           return new PageContent(type, data)
         }
