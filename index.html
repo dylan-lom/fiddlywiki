@@ -267,12 +267,17 @@
         function getActivePageFromDOM() {
           const title = document.querySelector('#active-page-title').innerText
           const slug = document.querySelector('#active-page-slug').innerText
+          const original = getActivePageFromHash()
 
           const contents = [...document.querySelectorAll('.active-page-content')]
             .map(content => {
               const type = content.querySelector('.active-page-content-type').innerText
-              const data = content.querySelector('.active-page-content-data')
-              return PageContent.derender(type, data)
+              const dataContainer = content.querySelector('.active-page-content-data')
+              const i = content.id.split('-').pop()
+
+              const originalType = original.content[i].type
+              const { data } = PageContent.derender(originalType ?? type, dataContainer)
+              return new PageContent(type, data)
             })
           return new Page(title, slug, contents)
         }
