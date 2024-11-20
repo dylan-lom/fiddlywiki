@@ -66,13 +66,43 @@
 
   <body>
     <script>
-
       class PageContent {
         type /* str */
         data /* str */
         constructor(type, data) {
           this.type = type
           this.data = data
+        }
+
+        render(target) {
+          const renderers = {
+            'text/html': (data) => target.innerHTML = data,
+            'application/json': (data) => target.innerHTML = `<pre><code>${data}</code></pre>`,
+            'text/plain': (data) => {
+            /* For some reason, firefox likes to insert extra <div>s, which turn into extra <br>s
+             * on re-renders, the pre prevents this from happening, and the .text makes it appear
+             * like a regular old div */
+              target.innerHTML = '<pre class="text"></pre>'
+              target.querySelector('pre').innerText = data
+            }
+          }
+
+          const nativeRenderer = renderers[this.type]
+          const renderer = nativeRenderer ?? renderers['text/plain']
+          renderer(this.data)
+          return !!nativeRenderer
+        }
+
+        static derender(type, target) {
+          const derenderers = {
+            'text/html': () => target.innerHTML,
+            'application/json': () => targert.innerText,
+            'text/plain': () => target.innerText,
+          }
+
+          const derenderer = derenderers[type] ?? derenderers['text/plain']
+          const data = derenderer(target)
+          return new PageContent(type, data)
         }
       }
 
@@ -153,18 +183,6 @@
       }
 
       function setActiveDOMPage(page) {
-        const contentRenderers = {
-          'text/html': (target, data) => target.innerHTML = data,
-          'application/json': (target, data) => target.innerHTML = `<pre><code>${data}</code></pre>`,
-          'text/plain': (target, data) => {
-          /* For some reason, firefox likes to insert extra <div>s, which turn into extra <br>s
-           * on re-renders, the pre prevents this from happening, and the .text makes it appear
-           * like a regular old div */
-            target.innerHTML = '<pre class="text"></pre>'
-            target.querySelector('pre').innerText = data
-          },
-        }
-
         const title = document.querySelector('#active-page-title')
         const slug = document.querySelector('#active-page-slug')
         const container = document.querySelector('#active-page-content-container')
@@ -179,26 +197,25 @@
           .forEach(content => content.remove())
 
         // Create new content
-        const contents = page.content.map(({ type, data }, i) => {
-          const content = contentTemplate.content.cloneNode(true).firstElementChild
-          content.id = `${page}-content-${i}`
-          content.querySelector('.active-page-content-type').innerText = type
+        const contents = page.content.map((content, i) => {
+          const contentContainer = contentTemplate.content.cloneNode(true).firstElementChild
+          contentContainer.id = `${page.slug}-content-${i}`
+          contentContainer.querySelector('.active-page-content-type').innerText = content.type
+          const target = contentContainer.querySelector('.active-page-content-data')
 
-          let renderer = contentRenderers[type]
-          if (!renderer) {
+          const renderedNatively = content.render(target)
+          if (!renderedNatively) {
             addNotification({
-              content: `Unsupported content type: ${type.textContent}. Falling back to text/plain.`,
+              content: `Unsupported content type: ${content.type}. Falling back to text/plain.`,
               kind: 'error'
             })
-            renderer = contentRenderers['text/plain']
           }
 
-          renderer(content.querySelector('.active-page-content-data'), data)
-          return content
+          return contentContainer
         })
 
         // Insert new content
-        contents.forEach(content => container.insertBefore(content, addButton))
+        contents.forEach(contentContainer => container.insertBefore(contentContainer, addButton))
       }
 
       function setActivePageFromSlug(slug) {
@@ -245,10 +262,7 @@
             .map(content => {
               const type = content.querySelector('.active-page-content-type').innerText
               const data = content.querySelector('.active-page-content-data')
-              const pageContent = new PageContent(type, type == 'text/html'
-                          ? data.innerHTML
-                          : data.innerText)
-              return pageContent
+              return PageContent.derender(type, data)
             })
           return new Page(title, slug, contents)
         }
