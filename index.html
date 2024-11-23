@@ -70,6 +70,7 @@
         static renders(type) { throw new Error() }
         static render(target, data) { throw new Error() }
         static derender(target) { throw new Error() }
+        static controls() { return [] }
       }
 
       const contentRenderers = [
@@ -82,25 +83,81 @@
         class JsonRenderer extends PageContentRenderer {
           static renders(type) { return 'application/json' == type }
           static render(target, data) { target.innerHTML = `<pre><code>${data}</code></pre>` }
-          static derender(target) { return target.innerText }
+          static derender(target) { return target.innerText } 
         },
 
         class ImageRenderer extends PageContentRenderer {
-          static renders(type) { return 'image' == type }
-          static render(target, data) {
-            target.innerHTML = `<input class="float-right" type="button" value="[upload]" onclick="onUploadImageClick(event)"> <img src="${data}">`
-          }
+          static renders(type) { return /^image$|^image\/.*$/.test(type) }
+          static render(target, data) { target.innerHTML = `<img src="${data}">` }
           static derender(target) {
             return (target.querySelector('img')?.src ?? '') + target.innerText
+          }
+          static controls() {
+            const uploadButton = document.createElement('input')
+            uploadButton.type = 'button'
+            uploadButton.value= '[upload]'
+            uploadButton.addEventListener('click', function onUploadImageClick(event) {
+              const activePage = getActivePageFromHash()
+              const activeContentNode = event.target.closest('.active-page-content')
+              // FIXME: Make this a helper function... somewhere
+              const i = activeContentNode.id.split('-').pop()
+              const content = activePage.content[i]
+
+              // Launch file selection dialog
+              const fileInput = document.createElement('input')
+              fileInput.type = 'file'
+
+              fileInput.addEventListener('change', async event => {
+                const { target } = event
+                if (target.files.length < 1) return // No files selected
+                console.assert(target.files.length < 2)
+
+                // Read the file as Data URL
+                const [ file ] = target.files
+                const reader = new FileReader()
+                const data = await reader.readAsDataURLAsync(file)
+                  .catch(error => addNotification({
+                      content: `Failed to import ${file.name}: ${error}`,
+                      kind: 'error'
+                  }))
+
+                // Some error occured reading the file
+                if (!data) return
+
+                // Set the content & save
+                activePage.content[i].data = data
+                setPage(activePage)
+              })
+
+              fileInput.click() // cont'd. in change event handler
+            })
+            return [ uploadButton ]
           }
         },
 
         class JavascriptRenderer extends PageContentRenderer {
           static renders(type) { return 'text/javascript' == type }
-          static render(target, data) {
-            target.innerHTML = `<input class="float-right" type="button" value="[exec]" onclick="onJavascriptExecClick(event)"><pre><code>${data}</code></pre>`
-          }
+          static render(target, data) { target.innerHTML = `<pre><code>${data}</code></pre>` }
           static derender(target) { return target.innerText }
+          static controls() {
+            const execButton = document.createElement('input')
+            execButton.type = 'button'
+            execButton.value = '[exec]'
+            execButton.addEventListener('click', async function onJavascriptExecClick(event) {
+              const activePage = getActivePageFromHash()
+              const activeContentNode = event.target.closest('.active-page-content')
+              const i = activeContentNode.id.split('-').pop()
+              const content = activePage.content[i]
+
+              const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+              const f = new AsyncFunction(content.data)
+              const result = await f()
+              // TODO: Improve method of returning data; could we overwrite console ?
+              console.log(result)
+            })
+
+            return [ execButton ]
+          }
         },
 
         class PlainTextRenderer extends PageContentRenderer {
@@ -125,21 +182,14 @@
         }
 
         render(target) {
-          const type = this.type.startsWith('image')
-            ? 'image'
-            : this.type
-
-          const renderer = contentRenderers.find(renderer => renderer.renders(type))
+          const renderer = contentRenderers.find(renderer => renderer.renders(this.type))
           console.assert(renderer, 'There should always be at least one renderer')
           renderer.render(target, this.data)
-          return true // TODO: Some other fallback mechanism?
+
+          return renderer.controls()
         }
 
         static derender(type, target) {
-          const renderType = type.startsWith('image')
-            ? 'image'
-            : type
-
           const renderer = contentRenderers.find(renderer => renderer.renders(type))
           console.assert(renderer, 'There should always be at least one renderer')
           const data = renderer.derender(target)
@@ -244,13 +294,13 @@
           contentContainer.querySelector('.active-page-content-type').innerText = content.type
           const target = contentContainer.querySelector('.active-page-content-data')
 
-          const renderedNatively = content.render(target)
-          if (!renderedNatively) {
-            addNotification({
-              content: `Unsupported content type: ${content.type}. Falling back to text/plain.`,
-              kind: 'error'
-            })
-          }
+          // Render content-type specific HTML
+          const controls = content.render(target)
+
+          // Add any content-type specific controls.
+          const controlsContainer = contentContainer.querySelector('.active-page-content-controls')
+          const firstButton = controlsContainer.querySelector('input[type="button"]')
+          controls.forEach(control => controlsContainer.insertBefore(control, firstButton))
 
           return contentContainer
         })
@@ -533,54 +583,6 @@
           setPage(activePage)
         }
 
-        function onUploadImageClick(event) {
-          const activePage = getActivePageFromHash()
-          const activeContentNode = event.target.closest('.active-page-content')
-          // FIXME: Make this a helper function... somewhere
-          const i = activeContentNode.id.split('-').pop()
-          const content = activePage.content[i]
-
-          // Launch file selection dialog
-          const fileInput = document.createElement('input')
-          fileInput.type = 'file'
-
-          fileInput.addEventListener('change', async event => {
-            const { target } = event
-            if (target.files.length < 1) return // No files selected
-            console.assert(target.files.length < 2)
-
-            // Read the file as Data URL
-            const [ file ] = target.files
-            const reader = new FileReader()
-            const data = await reader.readAsDataURLAsync(file)
-              .catch(error => addNotification({
-                  content: `Failed to import ${file.name}: ${error}`,
-                  kind: 'error'
-              }))
-
-            // Some error occured reading the file
-            if (!data) return
-
-            // Set the content & save
-            activePage.content[i].data = data
-            setPage(activePage)
-          })
-
-          fileInput.click() // cont'd. in change event handler
-        }
-
-        async function onJavascriptExecClick(event) {
-          const activePage = getActivePageFromHash()
-          const activeContentNode = event.target.closest('.active-page-content')
-          const i = activeContentNode.id.split('-').pop()
-          const content = activePage.content[i]
-
-          const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-          const f = new AsyncFunction(content.data)
-          const result = await f()
-          // TODO: Improve method of returning data; could we overwrite console ?
-          console.log(result)
-        }
 
         document.addEventListener('DOMContentLoaded', () => {
           populateAllPages()
@@ -665,7 +667,7 @@
           </script>
           <template id="active-page-content-template">
             <div class="active-page-content">
-              <div class="float-right">
+              <div class="active-page-content-controls float-right">
                 <span>type:</span>
                 <span class="active-page-content-type" contenteditable=""></span>
                 <input
