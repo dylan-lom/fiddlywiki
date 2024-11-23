@@ -78,14 +78,17 @@
           const renderers = {
             'text/html': (data) => target.innerHTML = data,
             'application/json': (data) => target.innerHTML = `<pre><code>${data}</code></pre>`,
-            'image': (data) => target.innerHTML = `<img src="${data}"><input class="float-right" type="button" value="[upload]" onclick="onUploadImageClick(event)">`,
+            'image': (data) => target.innerHTML = `<input class="float-right" type="button" value="[upload]" onclick="onUploadImageClick(event)"> <img src="${data}">`,
             'text/plain': (data) => {
             /* For some reason, firefox likes to insert extra <div>s, which turn into extra <br>s
              * on re-renders, the pre prevents this from happening, and the .text makes it appear
              * like a regular old div */
               target.innerHTML = '<pre class="text"></pre>'
               target.querySelector('pre').innerText = data
-            }
+            },
+            'text/javascript': (data) => {
+              target.innerHTML = `<input class="float-right" type="button" value="[exec]" onclick="onJavascriptExecClick(event)"><pre><code>${data}</code></pre>`
+            },
           }
 
           const type = this.type.startsWith('image')
@@ -504,9 +507,9 @@
 
         function onUploadImageClick(event) {
           const activePage = getActivePageFromHash()
-          const activeContent = event.target.closest('.active-page-content')
+          const activeContentNode = event.target.closest('.active-page-content')
           // FIXME: Make this a helper function... somewhere
-          const i = activeContent.id.split('-').pop()
+          const i = activeContentNode.id.split('-').pop()
           const content = activePage.content[i]
 
           // Launch file selection dialog
@@ -536,6 +539,19 @@
           })
 
           fileInput.click() // cont'd. in change event handler
+        }
+
+        async function onJavascriptExecClick(event) {
+          const activePage = getActivePageFromHash()
+          const activeContentNode = event.target.closest('.active-page-content')
+          const i = activeContentNode.id.split('-').pop()
+          const content = activePage.content[i]
+
+          const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+          const f = new AsyncFunction(content.data)
+          const result = await f()
+          // TODO: Improve method of returning data; could we overwrite console ?
+          console.log(result)
         }
 
         document.addEventListener('DOMContentLoaded', () => {
