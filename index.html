@@ -66,6 +66,56 @@
 
   <body>
     <script>
+      class PageContentRenderer {
+        static renders(type) { throw new Error() }
+        static render(target, data) { throw new Error() }
+        static derender(target) { throw new Error() }
+      }
+
+      const contentRenderers = [
+        class HtmlRenderer extends PageContentRenderer {
+          static renders(type) { return 'text/html' == type }
+          static render(target, data) { target.innerHTML = data }
+          static derender(target) { return target.innerHTML }
+        },
+
+        class JsonRenderer extends PageContentRenderer {
+          static renders(type) { return 'application/json' == type }
+          static render(target, data) { target.innerHTML = `<pre><code>${data}</code></pre>` }
+          static derender(target) { return target.innerText }
+        },
+
+        class ImageRenderer extends PageContentRenderer {
+          static renders(type) { return 'image' == type }
+          static render(target, data) {
+            target.innerHTML = `<input class="float-right" type="button" value="[upload]" onclick="onUploadImageClick(event)"> <img src="${data}">`
+          }
+          static derender(target) {
+            return (target.querySelector('img')?.src ?? '') + target.innerText
+          }
+        },
+
+        class JavascriptRenderer extends PageContentRenderer {
+          static renders(type) { return 'text/javascript' == type }
+          static render(target, data) {
+            target.innerHTML = `<input class="float-right" type="button" value="[exec]" onclick="onJavascriptExecClick(event)"><pre><code>${data}</code></pre>`
+          }
+          static derender(target) { return target.innerText }
+        },
+
+        class PlainTextRenderer extends PageContentRenderer {
+          static renders(type) { return true }
+          static render(target, data) {
+           /* For some reason, firefox likes to insert extra <div>s, which turn into extra <br>s
+           * on re-renders, the pre prevents this from happening, and the .text makes it appear
+           * like a regular old div */
+            target.innerHTML = '<pre class="text"></pre>'
+            target.querySelector('pre').innerText = data
+          }
+          static derender(target) { return target.innerText }
+        }
+      ]
+
       class PageContent {
         type /* str */
         data /* str */
@@ -75,46 +125,24 @@
         }
 
         render(target) {
-          const renderers = {
-            'text/html': (data) => target.innerHTML = data,
-            'application/json': (data) => target.innerHTML = `<pre><code>${data}</code></pre>`,
-            'image': (data) => target.innerHTML = `<input class="float-right" type="button" value="[upload]" onclick="onUploadImageClick(event)"> <img src="${data}">`,
-            'text/plain': (data) => {
-            /* For some reason, firefox likes to insert extra <div>s, which turn into extra <br>s
-             * on re-renders, the pre prevents this from happening, and the .text makes it appear
-             * like a regular old div */
-              target.innerHTML = '<pre class="text"></pre>'
-              target.querySelector('pre').innerText = data
-            },
-            'text/javascript': (data) => {
-              target.innerHTML = `<input class="float-right" type="button" value="[exec]" onclick="onJavascriptExecClick(event)"><pre><code>${data}</code></pre>`
-            },
-          }
-
           const type = this.type.startsWith('image')
             ? 'image'
             : this.type
 
-          const nativeRenderer = renderers[type]
-          const renderer = nativeRenderer ?? renderers['text/plain']
-          renderer(this.data)
-          return !!nativeRenderer
+          const renderer = contentRenderers.find(renderer => renderer.renders(type))
+          console.assert(renderer, 'There should always be at least one renderer')
+          renderer.render(target, this.data)
+          return true // TODO: Some other fallback mechanism?
         }
 
         static derender(type, target) {
-          const derenderers = {
-            'text/html': () => target.innerHTML,
-            'application/json': () => targert.innerText,
-            'image': () => (target.querySelector('img')?.src ?? '') + target.innerText,
-            'text/plain': () => target.innerText,
-          }
-
           const renderType = type.startsWith('image')
             ? 'image'
             : type
 
-          const derenderer = derenderers[renderType] ?? derenderers['text/plain']
-          const data = derenderer(target)
+          const renderer = contentRenderers.find(renderer => renderer.renders(type))
+          console.assert(renderer, 'There should always be at least one renderer')
+          const data = renderer.derender(target)
           return new PageContent(type, data)
         }
       }
