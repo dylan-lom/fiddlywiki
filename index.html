@@ -237,7 +237,7 @@
         }
       }
 
-      function setPage(page) {
+      function setPage(page, navigate = true) {
         const pages = getPages()
         let index = pages.findIndex(existingPage => existingPage.slug === page.slug)
 
@@ -247,12 +247,12 @@
         }
 
         if (page.slug == 'Special:Settings' && (
-          page.content.type !== 'application/json'
-          || throws(JSON.parse.bind(null, page.content.data))
+          page.content[0].type !== 'application/json'
+          || throws(JSON.parse.bind(null, page.content[0].data))
         )) {
           if (window.confirm('Special:Settings is invalid, reset to defaults?')) {
-            page.content.type = 'application/json'
-            page.content.data = JSON.stringify(getSettings(true), undefined, 2)
+            page.content[0].type = 'application/json'
+            page.content[0].data = JSON.stringify(getSettings(true), undefined, 2)
           }
         }
 
@@ -271,6 +271,8 @@
         // Rerender
         if (page.slug == getActivePageSlugFromHash())
           setActiveDOMPage(page)
+        else if (navigate)
+          window.location.hash = `#?p=${page.slug}`
       }
 
       function setActiveDOMPage(page) {
@@ -356,7 +358,7 @@
               const dataContainer = content.querySelector('.active-page-content-data')
               const i = content.id.split('-').pop()
 
-              const originalType = original.content[i].type
+              const originalType = original?.content?.[i]?.type
               const { data } = PageContent.derender(originalType ?? type, dataContainer)
               return new PageContent(type, data)
             })
@@ -423,8 +425,8 @@
           const page = getPage('Special:Settings')
           if (!page) return defaultSettings
 
-          const parseSettings = JSON.parse.bind(null, page.content.data)
-          if (page.content.type !== 'application/json' || throws(parseSettings)) {
+          const parseSettings = JSON.parse.bind(null, page.content[0].data)
+          if (page.content[0].type !== 'application/json' || throws(parseSettings)) {
             addNotification({
               content: 'Special:Settings is invalid, ignoring',
               kind: 'error',
@@ -527,8 +529,13 @@
             const reader = new FileReader()
             const text = await reader.readAsTextAsync(file)
             const newPages = JSON.parse(text)
-            newPages.map(newPage => setPage(newPage))
+            newPages.map(newPage => {
+              if (!Array.isArray(newPage.content))
+                newPage.content = [ newPage.content ]
+              setPage(new Page(newPage.title, newPage.slug, newPage.content), false)
+            })
           } catch (error) {
+            console.error(error)
             addNotification({
               content: `Failed to import ${file.name}: ${error}`,
               kind: 'error'
