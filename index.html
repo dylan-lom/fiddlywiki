@@ -461,7 +461,11 @@
             return defaultSettings
           }
 
-          return parseSettings()
+          const userSettings = parseSettings()
+          if (!userSettings.uploadTarget)
+            userSettings.uploadTarget = defaultSettings.uploadTarget
+
+          return userSettings
         }
 
         function onUploadButtonClick() {
@@ -745,6 +749,16 @@
       "type": "text/plain",
       "data": "Welcome to FiddlyWiki!\n\n## Quick-Start Guide\n\nAll fields with a dotted-grey border may be edited by clicking inside of them. Any changes made within such a field will be automatically reflected on your local/client-side copy of the application.\n\nTo commit a change you can use the [save] and [upload] buttons, which download the current page as HTML, or POST the current page as HTML respectively.\n\nThe [new] button may be used to create a new wiki page.\n\nThe [export] and [import] buttons may be used to interact with the underlying JSON representation of the wiki's pages. These buttons may be useful during migrations and/or updates to the software.\n\nBelow the buttons are a list of the wiki's current pages, clicking on one will open it (hiding this page!). Pages can be permalinked by copying the URL displayed when navigating to that page.\n"
     }
+  },
+  {
+    "title": "Special:Settings",
+    "slug": "Special:Settings",
+    "content": [
+      {
+        "type": "application/json",
+        "data": "{\n  \"uploadTarget\": null,\n  \"uploadCredentials\": \"same-origin\",\n  \"aliases\": [\n    [\n      \"text/plain+mono\",\n      \"code\"\n    ]\n  ]\n}"
+      }
+    ]
   }
 ]</script>
   
