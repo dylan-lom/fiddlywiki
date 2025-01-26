@@ -73,15 +73,15 @@
         static controls() { return [] }
       }
 
-      const contentRenderers = [
+      const builtinContentRenderers = [
         class HtmlRenderer extends PageContentRenderer {
           static renders(type) { return 'text/html' == type }
           static render(target, data) { target.innerHTML = data }
           static derender(target) { return target.innerHTML }
         },
 
-        class JsonRenderer extends PageContentRenderer {
-          static renders(type) { return 'application/json' == type }
+        class MonospaceRenderer extends PageContentRenderer {
+          static renders(type) { return 'text/plain+mono' == type }
           static render(target, data) { target.innerHTML = `<pre><code>${data}</code></pre>` }
           static derender(target) { return target.innerText } 
         },
@@ -173,6 +173,8 @@
         }
       ]
 
+      let contentRenderers = [ ...builtinContentRenderers ]
+
       class PageContent {
         type /* str */
         data /* str */
@@ -228,7 +230,7 @@
         return getPages().find(page => page.slug === slug)
       }
 
-      function throws(f) {
+      function doesThrow(f) {
         try {
           f()
           return false
@@ -248,7 +250,7 @@
 
         if (page.slug == 'Special:Settings' && (
           page.content[0].type !== 'application/json'
-          || throws(JSON.parse.bind(null, page.content[0].data))
+          || doesThrow(() => JSON.parse(page.content[0].data))
         )) {
           if (window.confirm('Special:Settings is invalid, reset to defaults?')) {
             page.content[0].type = 'application/json'
@@ -409,6 +411,30 @@
           return file
         }
 
+        function aliasContentRenderer(baseType, newType) {
+          const base = builtinContentRenderers.find(r => r.renders(baseType))
+          return class extends (base) {
+            constructor() { super() }
+            static renders(type) { return type == newType || base.renders(type) }
+            static render(target, data) { return base.render(target, data) }
+            static derender(target) { return base.derender(target) }
+            static controls() { return base.controls() }
+          }
+        }
+
+        function populateContentRenderers() {
+          const aliasedContentRenderers = [
+            [ 'text/plain+mono', 'application/json' ],
+            [ 'text/plain+mono', 'code' ],
+            ...getSettings()?.aliases
+          ].map(([baseType, newType]) => aliasContentRenderer(baseType, newType))
+
+          contentRenderers = [
+            ...aliasedContentRenderers,
+            ...builtinContentRenderers,
+          ]
+        }
+
         function onSaveButtonClick() {
           window.open(URL.createObjectURL(getDocumentAsFile()))
           addNotification({ content: 'Saved' })
@@ -418,6 +444,7 @@
           const defaultSettings = {
             uploadTarget: window.location.origin + window.location.pathname,
             uploadCredentials: 'same-origin',
+            aliases: [ [ "text/plain+mono", "code" ] ]
           }
 
           if (getDefault) return defaultSettings
@@ -425,8 +452,8 @@
           const page = getPage('Special:Settings')
           if (!page) return defaultSettings
 
-          const parseSettings = JSON.parse.bind(null, page.content[0].data)
-          if (page.content[0].type !== 'application/json' || throws(parseSettings)) {
+          const parseSettings = () => JSON.parse(page.content[0].data)
+          if (page.content[0].type !== 'application/json' || doesThrow(parseSettings)) {
             addNotification({
               content: 'Special:Settings is invalid, ignoring',
               kind: 'error',
@@ -593,6 +620,7 @@
 
         document.addEventListener('DOMContentLoaded', () => {
           populateAllPages()
+          populateContentRenderers()
 
           document.querySelector('#active-page').addEventListener('focusout', event => {
             const activePage = getActivePageFromDOM()
