@@ -90,7 +90,9 @@
           static renders(type) { return /^image$|^image\/.*$/.test(type) }
           static render(target, data) { target.innerHTML = `<img src="${data}">` }
           static derender(target) {
-            return (target.querySelector('img')?.src ?? '') + target.innerText
+            /* NOTE: [image element].src may resolve the src; often giving an absolute URL
+             * when we don't want one; for this reason we use the DOM attribute instead */
+            return (target.querySelector('img')?.getAttribute('src') ?? '') + target.innerText
           }
           static controls() {
             const uploadButton = document.createElement('input')
