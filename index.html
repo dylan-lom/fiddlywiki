@@ -216,6 +216,43 @@
           )
         }
 
+        render(target) {
+          if (!target) target = document.querySelector('#active-page')
+          const title = target.querySelector('#active-page-title')
+          const slug = target.querySelector('#active-page-slug')
+          const container = target.querySelector('#active-page-content-container')
+          const contentTemplate = target.querySelector('#active-page-content-template')
+          const addButton = target.querySelector('#active-page-content-add-button')
+
+          title.innerText = this.title
+          slug.innerText = this.slug
+
+          // Clear previous content
+          Array.from(container.querySelectorAll('.active-page-content'))
+            .forEach(content => content.remove())
+
+          // Create new content
+          const contents = this.content.map((content, i) => {
+            const contentContainer = contentTemplate.content.cloneNode(true).firstElementChild
+            contentContainer.id = `${this.slug}-content-${i}`
+            contentContainer.querySelector('.active-page-content-type').innerText = content.type
+            const target = contentContainer.querySelector('.active-page-content-data')
+
+            // Render content-type specific HTML
+            const controls = content.render(target)
+
+            // Add any content-type specific controls.
+            const controlsContainer = contentContainer.querySelector('.active-page-content-controls')
+            const firstButton = controlsContainer.querySelector('input[type="button"]')
+            controls.forEach(control => controlsContainer.insertBefore(control, firstButton))
+
+            return contentContainer
+          })
+
+          // Insert new content
+          contents.forEach(contentContainer => container.insertBefore(contentContainer, addButton))
+        }
+
         static FromJsonArray(json) /* Page[] */ {
           console.assert(Array.isArray(json))
           return json.map(page => new Page(page.title, page.slug, page.content))
@@ -272,45 +309,9 @@
         document.querySelector('#pages').innerHTML = json
         // Rerender
         if (page.slug == getActivePageSlugFromHash())
-          setActiveDOMPage(page)
+          page.render()
         else if (navigate)
           window.location.hash = `#?p=${page.slug}`
-      }
-
-      function setActiveDOMPage(page) {
-        const title = document.querySelector('#active-page-title')
-        const slug = document.querySelector('#active-page-slug')
-        const container = document.querySelector('#active-page-content-container')
-        const contentTemplate = document.querySelector('#active-page-content-template')
-        const addButton = document.querySelector('#active-page-content-add-button')
-
-        title.innerText = page.title
-        slug.innerText = page.slug
-
-        // Clear previous content
-        Array.from(container.querySelectorAll('.active-page-content'))
-          .forEach(content => content.remove())
-
-        // Create new content
-        const contents = page.content.map((content, i) => {
-          const contentContainer = contentTemplate.content.cloneNode(true).firstElementChild
-          contentContainer.id = `${page.slug}-content-${i}`
-          contentContainer.querySelector('.active-page-content-type').innerText = content.type
-          const target = contentContainer.querySelector('.active-page-content-data')
-
-          // Render content-type specific HTML
-          const controls = content.render(target)
-
-          // Add any content-type specific controls.
-          const controlsContainer = contentContainer.querySelector('.active-page-content-controls')
-          const firstButton = controlsContainer.querySelector('input[type="button"]')
-          controls.forEach(control => controlsContainer.insertBefore(control, firstButton))
-
-          return contentContainer
-        })
-
-        // Insert new content
-        contents.forEach(contentContainer => container.insertBefore(contentContainer, addButton))
       }
 
       function setActivePageFromSlug(slug) {
@@ -318,7 +319,7 @@
             getPage(slug)
             ?? new Page('lazy_title', slug, new PageContent('text/plain', `Page not found: ${slug}`))
           )
-          setActiveDOMPage(page)
+          page.render()
           window.location.hash = `#?p=${slug}`
         }
 
@@ -623,15 +624,12 @@
 
 
         document.addEventListener('DOMContentLoaded', () => {
+          const settingsPage = getPage('Special:Settings')
+          // settingsPage.render()
+
           populateAllPages()
           populateContentRenderers()
 
-          document.querySelector('#active-page').addEventListener('focusout', event => {
-            const activePage = getActivePageFromDOM()
-            console.log(activePage)
-            setPage(activePage)
-            populateAllPages()
-          })
 
           const addEventListener = function(target, type, listener) {
             (typeof target === 'string'
@@ -640,6 +638,12 @@
             ).addEventListener(type, listener)
           }
 
+          addEventListener('#active-page', 'focusout', event => {
+            const activePage = getActivePageFromDOM()
+            console.log(activePage)
+            setPage(activePage)
+            populateAllPages()
+          })
           addEventListener('#save-button', 'click', onSaveButtonClick)
           addEventListener('#upload-button', 'click', onUploadButtonClick)
           addEventListener('#new-button', 'click', onNewButtonClick)
