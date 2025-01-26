@@ -138,13 +138,18 @@
         class JavascriptRenderer extends PageContentRenderer {
           static renders(type) { return /^text\/javascript(\+.*)?$/.test(type) }
           static render(target, data, type) {
-            target.innerHTML = `<pre><code>${data}</code></pre>`
+            target.innerHTML = `<pre><code>${data
+              .replaceAll('<', '&lt;')
+              .replaceAll('>', '&gt;')
+            }</code></pre>`
+
             if (/\+autoexec/.test(type)) {
-              console.log('AUTOEXEC: ' + data)
               JavascriptRenderer.exec(data)
             }
           }
-          static derender(target) { return target.innerText }
+          static derender(target) {
+            return target.innerText.replaceAll('&lt;', '<').replaceAll('&gt;', '>')
+          }
           static controls() {
             const execButton = document.createElement('input')
             execButton.type = 'button'
@@ -182,6 +187,7 @@
       ]
 
       let contentRenderers = [ ...builtinContentRenderers ]
+      let userDefinedContentRenderers = []
 
       class PageContent {
         type /* str */
@@ -440,6 +446,7 @@
 
           contentRenderers = [
             ...aliasedContentRenderers,
+            ...userDefinedContentRenderers,
             ...builtinContentRenderers,
           ]
         }
