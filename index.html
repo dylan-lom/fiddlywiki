@@ -68,7 +68,7 @@
     <script>
       class PageContentRenderer {
         static renders(type) { throw new Error() }
-        static render(target, data) { throw new Error() }
+        static render(target, data, type) { throw new Error() }
         static derender(target) { throw new Error() }
         static controls() { return [] }
       }
@@ -136,8 +136,14 @@
         },
 
         class JavascriptRenderer extends PageContentRenderer {
-          static renders(type) { return 'text/javascript' == type }
-          static render(target, data) { target.innerHTML = `<pre><code>${data}</code></pre>` }
+          static renders(type) { return /^text\/javascript(\+.*)?$/.test(type) }
+          static render(target, data, type) {
+            target.innerHTML = `<pre><code>${data}</code></pre>`
+            if (/\+autoexec/.test(type)) {
+              console.log('AUTOEXEC: ' + data)
+              JavascriptRenderer.exec(data)
+            }
+          }
           static derender(target) { return target.innerText }
           static controls() {
             const execButton = document.createElement('input')
@@ -148,15 +154,17 @@
               const activeContentNode = event.target.closest('.active-page-content')
               const i = activeContentNode.id.split('-').pop()
               const content = activePage.content[i]
-
-              const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-              const f = new AsyncFunction(content.data)
-              const result = await f()
-              // TODO: Improve method of returning data; could we overwrite console ?
-              console.log(result)
+              await JavascriptRenderer.exec(content.data)
             })
 
             return [ execButton ]
+          }
+          static async exec(data) {
+             const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+              const f = new AsyncFunction(data)
+              const result = await f()
+              // TODO: Improve method of returning data; could we overwrite console ?
+              console.log(result)
           }
         },
 
@@ -186,7 +194,7 @@
         render(target) {
           const renderer = contentRenderers.find(renderer => renderer.renders(this.type))
           console.assert(renderer, 'There should always be at least one renderer')
-          renderer.render(target, this.data)
+          renderer.render(target, this.data, this.type)
 
           return renderer.controls()
         }
@@ -624,12 +632,12 @@
 
 
         document.addEventListener('DOMContentLoaded', () => {
-          const settingsPage = getPage('Special:Settings')
-          // settingsPage.render()
-
           populateAllPages()
           populateContentRenderers()
 
+          // Load the settings page first, to trigger autoexec functions
+          const settingsPage = getPage('Special:Settings')
+          settingsPage.render()
 
           const addEventListener = function(target, type, listener) {
             (typeof target === 'string'
