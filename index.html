@@ -292,12 +292,12 @@
         }
       }
 
-      function setPage(page, navigate = true) {
+      function setPage(page, isImport = false) {
         const pages = getPages()
         let index = pages.findIndex(existingPage => existingPage.slug === page.slug)
 
         const originalSlug = getActivePageSlugFromHash()
-        if (originalSlug && originalSlug != page.slug && originalSlug != 'Special:New') {
+        if (!isImport && originalSlug && originalSlug != page.slug && originalSlug != 'Special:New') {
           index = pages.findIndex(existingPage => existingPage.slug === originalSlug)
         }
 
@@ -326,7 +326,7 @@
         // Rerender
         if (page.slug == getActivePageSlugFromHash())
           page.render()
-        else if (navigate)
+        else if (!isImport) // unless we are importing many pages
           window.location.hash = `#?p=${page.slug}`
       }
 
@@ -581,7 +581,7 @@
             newPages.map(newPage => {
               if (!Array.isArray(newPage.content))
                 newPage.content = [ newPage.content ]
-              setPage(new Page(newPage.title, newPage.slug, newPage.content), false)
+              setPage(new Page(newPage.title, newPage.slug, newPage.content), true)
             })
           } catch (error) {
             console.error(error)
